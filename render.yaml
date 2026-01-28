@@ -1,0 +1,46 @@
+# Render Blueprint for Library Management System Backend
+
+services:
+  - type: web
+    name: lms-backend
+    env: node
+    plan: free
+    region: oregon
+    branch: main
+    rootDir: LMS_BACKEND_NEST
+    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy && npm run build
+    startCommand: npm run start:prod
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8000"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: "15m"
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: "7d"
+      - key: EMAIL_HOST
+        value: "smtp.gmail.com"
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+
+databases:
+  - name: lms-db
+    plan: free
+    region: oregon
+    databaseName: lms_database
+    user: lms_user

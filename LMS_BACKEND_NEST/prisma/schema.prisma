@@ -1,0 +1,238 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  password     String
+  role         UserRole
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  isVerified   Boolean       @default(false)
+  otp          String?
+  otpExpiry    DateTime?
+  refreshToken String?
+  metadata     Json?
+  fines        Fine[]
+  WaivedFines  Fine[]        @relation("FineWaivedBy")
+  loans        Loan[]
+  reservations Reservation[]
+  transactions Transaction[]
+
+  @@index([name])
+}
+
+model PendingLibrarian {
+  id         String    @id @default(cuid())
+  name       String
+  email      String    @unique
+  password   String
+  metadata   Json
+  isVerified Boolean   @default(false)
+  otp        String?
+  otpExpiry  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  expiresAt  DateTime
+  status     String    @default("PENDING") // PENDING, APPROVED, REJECTED
+
+  @@index([email])
+  @@index([status])
+}
+
+model LibraryItem {
+  id           String         @id @default(cuid())
+  uniqueItemId String         @unique
+  title        String
+  status       ItemStatus     @default(AVAILABLE)
+  publishedAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  isArchived   Boolean        @default(false)
+  barcode      String?        @unique
+  description  String?
+  isbn         String?
+  language     String?        @default("English")
+  location     String?
+  metadata     Json
+  type         ItemType
+  categories   ItemCategory[]
+  loans        Loan[]
+  reservations Reservation[]
+
+  @@index([title])
+  @@index([type])
+  @@index([barcode])
+}
+
+model Category {
+  id          String         @id @default(cuid())
+  name        String         @unique
+  description String?
+  items       ItemCategory[]
+
+  @@index([name])
+}
+
+model ItemCategory {
+  id         String      @id @default(cuid())
+  itemId     String
+  categoryId String
+  category   Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  item       LibraryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, categoryId])
+}
+
+model Loan {
+  id           String      @id @default(cuid())
+  userId       String
+  itemId       String
+  loanDate     DateTime    @default(now())
+  dueDate      DateTime
+  returnDate   DateTime?
+  status       LoanStatus  @default(BORROWED)
+  renewalCount Int         @default(0)
+  fines        Fine[]
+  item         LibraryItem @relation(fields: [itemId], references: [id])
+  user         User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([dueDate])
+  @@index([returnDate])
+}
+
+model Fine {
+  id         String     @id @default(cuid())
+  userId     String
+  loanId     String?
+  amount     Decimal    @db.Decimal(10, 2)
+  status     FineStatus @default(PENDING)
+  reason     String?
+  waivedById String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  loan       Loan?      @relation(fields: [loanId], references: [id])
+  user       User       @relation(fields: [userId], references: [id])
+  waivedBy   User?      @relation("FineWaivedBy", fields: [waivedById], references: [id])
+}
+
+model Reservation {
+  id          String      @id @default(cuid())
+  userId      String
+  itemId      String
+  reservedAt  DateTime    @default(now())
+  expiresAt   DateTime
+  isFulfilled Boolean     @default(false)
+  item        LibraryItem @relation(fields: [itemId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([itemId])
+}
+
+model LibrarySettings {
+  id                  String   @id @default(cuid())
+  loanDurationDays    Int      @default(14)
+  overdueFinePerDay   Decimal  @default(1.00) @db.Decimal(5, 2)
+  updatedAt           DateTime @updatedAt
+  maxDVDsPerUser      Int      @default(3)
+  maxItemsPerUser     Int      @default(5)
+  maxMagazinesPerUser Int      @default(10)
+}
+
+model Transaction {
+  id        String       @id @default(cuid())
+  userId    String
+  action    ActivityType
+  details   String?
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+enum UserRole {
+  STUDENT
+  TEACHER
+  LIBRARIAN
+  ADMIN
+}
+
+enum ItemStatus {
+  AVAILABLE
+  BORROWED
+  RESERVED
+  LOST
+  DAMAGED
+  MAINTENANCE
+}
+
+enum FineStatus {
+  PENDING
+  PAID
+  WAIVED
+}
+
+enum ItemType {
+  BOOK
+  EBOOK
+  AUDIOBOOK
+  DVD
+  BLURAY
+  CD
+  MAGAZINE
+  NEWSPAPER
+  JOURNAL
+  THESIS
+  REFERENCE
+  MAP
+  GAME
+  SOFTWARE
+  EQUIPMENT
+}
+
+enum ActivityType {
+  LOAN_CREATED
+  LOAN_RETURNED
+  LOAN_RENEWED
+  RESERVATION_PLACED
+  RESERVATION_APPROVED
+  RESERVATION_CANCELLED
+  FINE_APPLIED
+  FINE_PAID
+  FINE_WAIVED
+  USER_SUSPENDED
+  USER_ACTIVATED
+  ITEM_ADDED
+  ITEM_UPDATED
+  ITEM_ARCHIVED
+  LIBRARY_SETTINGS_CREATED
+  LIBRARY_SETTINGS_UPDATED
+  LIBRARY_SETTINGS_RESET
+  USER_REGISTERED
+  USER_LOGIN
+  USER_LOGOUT
+  EMAIL_VERIFIED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  ADMIN_USER_CREATED
+  ITEM_BORROWED
+  ITEM_RETURNED
+  PROFILE_UPDATED
+  ROLE_CHANGED
+}
+
+enum LoanStatus {
+  BORROWED
+  PENDING_RETURN
+  RETURNED
+}

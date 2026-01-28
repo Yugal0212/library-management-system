@@ -1,0 +1,71 @@
+# Render service descriptor for the NestJS backend
+# Place this file at the repository root. Render will create the service(s) when
+# you connect the repository and push.
+
+services:
+  - type: web
+    name: lms-backend
+    env: node
+    plan: free
+    region: oregon
+    branch: main
+    # Root directory for the backend
+    rootDir: LMS_BACKEND_NEST
+    # Use npm to install (ensure devDependencies are present for build/prisma generate).
+    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy && npm run build
+    # Start the built production bundle.
+    startCommand: npm run start:prod
+    autoDeploy: true
+    # health check is exposed at GET /health in src/main.ts
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8000"
+      - key: DATABASE_URL
+        value: "" # set this in the Render dashboard or via the Postgres addon below
+      - key: JWT_SECRET
+        value: ""
+      - key: MAIL_HOST
+        value: ""
+      - key: MAIL_PORT
+        value: ""
+      - key: MAIL_USER
+        value: ""
+      - key: MAIL_PASS
+        value: ""
+
+    # Optional: increase concurrency settings or service-specific misc options here.
+
+# You can create a managed Postgres database here. If you do, the Render dashboard
+# will provide a connection string which you should set to DATABASE_URL for the service above.
+databases:
+  - name: lms-db
+    plan: free
+    region: oregon
+    databaseName: lms_database
+    user: lms_user
+
+# Manual jobs you can trigger from the Render dashboard. These are NOT run automatically.
+jobs:
+  - type: worker
+    name: prisma-migrate-deploy
+    env: node
+    region: oregon
+    plan: free
+    branch: main
+    rootDir: LMS_BACKEND_NEST
+    buildCommand: npm install && npx prisma generate
+    startCommand: npm run prisma:deploy
+
+  - type: worker
+    name: prisma-seed
+    env: node
+    region: oregon
+    plan: free
+    branch: main
+    rootDir: LMS_BACKEND_NEST
+    buildCommand: npm install && npx prisma generate
+    # Runs the TypeScript seed script defined in package.json (uses ts-node).
+    startCommand: npm run prisma:seed
