@@ -9,7 +9,7 @@ services:
     branch: main
     rootDir: LMS_BACKEND_NEST
     buildCommand: npm install && npx prisma generate && npx prisma migrate deploy && npm run build
-    startCommand: npm run start:prod
+    startCommand: node dist/main.js
     autoDeploy: true
     healthCheckPath: /health
     envVars:
