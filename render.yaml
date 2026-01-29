@@ -8,7 +8,7 @@ services:
     region: oregon
     branch: main
     rootDir: LMS_BACKEND_NEST
-    buildCommand: npm install && npm run prisma:deploy && npm run build
+    buildCommand: npm install && npm run build:prod && ls -la dist/
     startCommand: npm run start:prod
     autoDeploy: true
     healthCheckPath: /health

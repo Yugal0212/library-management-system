@@ -12,7 +12,7 @@ services:
     # Root directory for the backend
     rootDir: LMS_BACKEND_NEST
     # Use npm to install (ensure devDependencies are present for build/prisma generate).
-    buildCommand: npm install && npm run prisma:deploy && npm run build
+    buildCommand: npm install && npm run build:prod && ls -la dist/
     # Start the built production bundle.
     startCommand: npm run start:prod
     autoDeploy: true
