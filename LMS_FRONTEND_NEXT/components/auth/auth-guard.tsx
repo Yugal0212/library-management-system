@@ -28,7 +28,7 @@ function AuthGuardInner({ children, allowed }: Props) {
       setRedirecting(true)
       // no user → send to login and preserve intended path
       const next = pathname ? `?next=${encodeURIComponent(pathname)}` : ""
-      router.replace(`/auth/login${next}`)
+      router.push(`/auth/login${next}`)
       return
     }
     
@@ -41,7 +41,7 @@ function AuthGuardInner({ children, allowed }: Props) {
           ? "/dashboard/librarian"
           : "/dashboard/patron"
       
-      router.replace(targetPath)
+      router.push(targetPath)
       return
     }
     

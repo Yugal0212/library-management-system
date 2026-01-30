@@ -38,6 +38,9 @@ export function clearAuthData(): void {
     localStorage.removeItem(USER_KEY)
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(REFRESH_TOKEN_KEY)
+    // Clear cookies
+    document.cookie = "accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT"
+    document.cookie = "refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT"
   }
 }
 
@@ -46,9 +49,12 @@ export function setTokens(accessToken?: string, refreshToken?: string) {
   if (typeof window === "undefined") return
   if (accessToken) {
     localStorage.setItem(TOKEN_KEY, accessToken)
+    // Set cookie for middleware
+    document.cookie = `accessToken=${accessToken}; path=/; max-age=86400; SameSite=Lax`
   }
   if (refreshToken) {
     localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+    document.cookie = `refreshToken=${refreshToken}; path=/; max-age=604800; SameSite=Lax`
   }
 }
 
@@ -86,7 +92,11 @@ export function clearTokens() {
   // Clear tokens
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(REFRESH_TOKEN_KEY)
-  // Cookies will be cleared by logout endpoint
+  // Clear cookies
+  if (typeof window !== "undefined") {
+    document.cookie = "accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT"
+    document.cookie = "refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT"
+  }
 }
 
 // base fetch that attaches Authorization and handles 401 with refresh

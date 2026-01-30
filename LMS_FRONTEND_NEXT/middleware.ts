@@ -14,30 +14,30 @@ export function middleware(request: NextRequest) {
   
   // Check if user is trying to access dashboard without being authenticated
   if (pathname.startsWith('/dashboard')) {
-    // Try to get user from cookies (you'll need to implement cookie-based auth)
+    // Try to get user from cookies
     const accessToken = request.cookies.get('accessToken')
     
     if (!accessToken) {
       // Redirect to login with return URL
       const loginUrl = new URL('/auth/login', request.url)
       loginUrl.searchParams.set('next', pathname)
-      return NextResponse.redirect(loginUrl)
+      const response = NextResponse.redirect(loginUrl)
+      
+      // Add cache control headers to prevent caching of redirect
+      response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+      response.headers.set('Pragma', 'no-cache')
+      response.headers.set('Expires', '0')
+      
+      return response
     }
     
-    // Basic role-based route protection
-    if (pathname.startsWith('/dashboard/admin')) {
-      // For admin routes, we'll let AuthGuard handle detailed role checking
-      // This is just a basic check
-      return NextResponse.next()
-    }
+    // For authenticated dashboard routes, add no-cache headers
+    const response = NextResponse.next()
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
     
-    if (pathname.startsWith('/dashboard/librarian')) {
-      return NextResponse.next()
-    }
-    
-    if (pathname.startsWith('/dashboard/patron')) {
-      return NextResponse.next()
-    }
+    return response
   }
   
   // For root dashboard route, redirect to login if not authenticated
@@ -45,7 +45,14 @@ export function middleware(request: NextRequest) {
     const accessToken = request.cookies.get('accessToken')
     if (!accessToken) {
       const loginUrl = new URL('/auth/login', request.url)
-      return NextResponse.redirect(loginUrl)
+      const response = NextResponse.redirect(loginUrl)
+      
+      // Add cache control headers
+      response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+      response.headers.set('Pragma', 'no-cache')
+      response.headers.set('Expires', '0')
+      
+      return response
     }
   }
   

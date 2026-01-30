@@ -37,7 +37,7 @@ async function postRefresh() {
       if (tokenResponse.ok) {
         const data = await tokenResponse.json()
         if (data.accessToken) {
-          localStorage.setItem('accessToken', data.accessToken)
+          localStorage.setItem('auth_token', data.accessToken)
         }
         if (data.refreshToken) {
           localStorage.setItem('auth_refresh_token', data.refreshToken)
@@ -50,10 +50,10 @@ async function postRefresh() {
 export async function apiFetch<T = any>(path: string, opts: Options = {}, retry = true): Promise<T> {
   const { json, headers, ...rest } = opts
   
-  // Get token from localStorage
+  // Get token from localStorage - use consistent key from auth.ts
   let authHeaders = {}
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('accessToken')
+    const token = localStorage.getItem('auth_token')
     if (token) {
       authHeaders = { Authorization: `Bearer ${token}` }
     }
@@ -79,7 +79,7 @@ export async function apiFetch<T = any>(path: string, opts: Options = {}, retry 
       // Get updated token after refresh
       let updatedAuthHeaders = {}
       if (typeof window !== 'undefined') {
-        const newToken = localStorage.getItem('accessToken')
+        const newToken = localStorage.getItem('auth_token')
         if (newToken) {
           updatedAuthHeaders = { Authorization: `Bearer ${newToken}` }
         }

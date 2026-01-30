@@ -44,8 +44,13 @@ export default function LoginPage() {
       })
 
       // Store user and tokens in localStorage
+      console.log('Login successful, storing user:', response.user)
       setUserInLocalStorage(response.user)
       setTokens(response.accessToken, response.refreshToken)
+      
+      // Verify storage
+      console.log('User stored in localStorage:', localStorage.getItem('auth_user'))
+      console.log('Token stored:', localStorage.getItem('auth_token') ? 'Yes' : 'No')
 
       // Show success message
       toast({
@@ -53,16 +58,24 @@ export default function LoginPage() {
         description: `Welcome back, ${response.user.name}!`
       })
 
-      // Redirect based on role immediately
+      // Redirect based on role - use window.location for reliable production redirects
       const role = response.user.role
+      let redirectPath = "/dashboard/patron"
       
       if (role === "ADMIN") {
-        window.location.href = "/dashboard/admin"
+        redirectPath = "/dashboard/admin"
       } else if (role === "LIBRARIAN") {
-        window.location.href = "/dashboard/librarian"
-      } else {
-        window.location.href = "/dashboard/patron"
+        redirectPath = "/dashboard/librarian"
       }
+      
+      console.log('Redirecting to:', redirectPath)
+
+      // Use setTimeout to ensure localStorage is written and state is updated
+      setTimeout(() => {
+        // Force a hard navigation to ensure fresh page load with new auth state
+        console.log('Executing redirect to:', redirectPath)
+        window.location.href = redirectPath
+      }, 100)
 
     } catch (err: any) {
       console.error("Login error:", err)
@@ -133,6 +146,7 @@ export default function LoginPage() {
                       <Input
                         id="email"
                         type="email"
+                        autoComplete="email"
                         value={loginData.email}
                         onChange={(e) => setLoginData((prev) => ({ ...prev, email: e.target.value }))}
                         placeholder="Enter your email"
@@ -147,6 +161,7 @@ export default function LoginPage() {
                         <Input
                           id="password"
                           type={showPassword ? "text" : "password"}
+                          autoComplete="current-password"
                           value={loginData.password}
                           onChange={(e) => setLoginData((prev) => ({ ...prev, password: e.target.value }))}
                           placeholder="Enter your password"

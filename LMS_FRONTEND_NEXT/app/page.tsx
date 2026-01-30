@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { BookOpen, Users, Shield, ArrowRight, CheckCircle, Sparkles, Library, Zap, Award, Globe } from 'lucide-react'
+import { BookOpen, Users, Shield, ArrowRight, CheckCircle, Sparkles, Library, Zap, Award, Globe, Menu } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
 export default function HomePage() {
   const [isVisible, setIsVisible] = useState(false)
@@ -224,6 +225,8 @@ export default function HomePage() {
               </div>
             </div>
 
+
+
             <div
               className={`hidden md:flex items-center space-x-8 transition-all duration-1000 delay-300 ease-out ${
                 isVisible ? "translate-x-0 opacity-100" : "translate-x-10 opacity-0"
@@ -257,20 +260,76 @@ export default function HomePage() {
                 Contact
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-600 to-purple-600 group-hover:w-full transition-all duration-300"></span>
               </Link>
-              <Link href="/auth/login">
-                <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl relative overflow-hidden group">
-                  <span className="relative z-10">Sign In</span>
-                  <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                </Button>
-              </Link>
-              <Link href="/auth/signup">
-                <Button
-                  variant="outline"
-                  className="border-indigo-200 hover:bg-indigo-50 transform hover:scale-105 transition-all duration-300 bg-white/80 backdrop-blur-sm hover:shadow-lg"
-                >
-                  Get Started
-                </Button>
-              </Link>
+              <div className="flex items-center space-x-4">
+                <Link href="/auth/login">
+                  <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl relative overflow-hidden group">
+                    <span className="relative z-10">Sign In</span>
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  </Button>
+                </Link>
+                <Link href="/auth/signup">
+                  <Button
+                    variant="outline"
+                    className="border-indigo-200 hover:bg-indigo-50 transform hover:scale-105 transition-all duration-300 bg-white/80 backdrop-blur-sm hover:shadow-lg"
+                  >
+                    Get Started
+                  </Button>
+                </Link>
+              </div>
+            </div>
+
+            {/* Mobile Menu */}
+            <div className="md:hidden">
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="text-gray-600 hover:text-indigo-600 hover:bg-indigo-50">
+                    <Menu className="h-6 w-6" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent className="w-[300px] sm:w-[540px] overflow-y-auto">
+                  <div className="flex flex-col space-y-6 mt-8">
+                    <div className="flex flex-col space-y-4">
+                      <Link
+                        href="#features"
+                        className="text-lg font-medium text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 px-4 py-2 rounded-lg transition-colors"
+                      >
+                        Features
+                      </Link>
+                      <Link
+                        href="#solutions"
+                        className="text-lg font-medium text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 px-4 py-2 rounded-lg transition-colors"
+                      >
+                        Solutions
+                      </Link>
+                      <Link
+                        href="#pricing"
+                        className="text-lg font-medium text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 px-4 py-2 rounded-lg transition-colors"
+                      >
+                        Pricing
+                      </Link>
+                      <Link
+                        href="#contact"
+                        className="text-lg font-medium text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 px-4 py-2 rounded-lg transition-colors"
+                      >
+                        Contact
+                      </Link>
+                    </div>
+                    
+                    <div className="flex flex-col space-y-4 pt-4 border-t border-gray-100">
+                      <Link href="/auth/login" className="w-full">
+                        <Button className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg">
+                          Sign In
+                        </Button>
+                      </Link>
+                      <Link href="/auth/signup" className="w-full">
+                        <Button variant="outline" className="w-full border-indigo-200 hover:bg-indigo-50 text-indigo-700">
+                          Get Started
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </SheetContent>
+              </Sheet>
             </div>
           </nav>
         </header>

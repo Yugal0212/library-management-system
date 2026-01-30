@@ -32,36 +32,11 @@ export function useAuth(): AuthResponse {
     setMounted(true)
     // Only access localStorage after component mounts
     const user = getUserFromLocalStorage()
-    console.log('[useAuth] Component mounted, user from localStorage:', user)
     setStoredUserState(user as User)
   }, [])
 
-  // Re-check localStorage when mounted state changes (helps with redirects)
-  useEffect(() => {
-    if (mounted) {
-      const checkUser = () => {
-        const user = getUserFromLocalStorage()
-        if (user && JSON.stringify(user) !== JSON.stringify(storedUser)) {
-          console.log('[useAuth] User state updated:', user)
-          setStoredUserState(user as User)
-        }
-      }
-      // Check immediately
-      checkUser()
-      // Also set up a small interval to catch updates
-      const interval = setInterval(checkUser, 100)
-      // Clear after 2 seconds (enough time for auth to settle)
-      const timeout = setTimeout(() => clearInterval(interval), 2000)
-      return () => {
-        clearInterval(interval)
-        clearTimeout(timeout)
-      }
-    }
-  }, [mounted, storedUser])
-
   // If not mounted yet (SSR), return loading state
   if (!mounted) {
-    console.log('[useAuth] Not mounted yet, returning loading state')
     return {
       user: null,
       isLoading: true
@@ -70,7 +45,6 @@ export function useAuth(): AuthResponse {
 
   // If we have a stored user, return it immediately
   if (storedUser) {
-    console.log('[useAuth] Returning stored user:', storedUser)
     return {
       user: storedUser,
       isLoading: false
