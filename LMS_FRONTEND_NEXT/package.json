@@ -21,7 +21,6 @@
     "@nestjs/platform-express": "latest",
     "@nestjs/testing": "latest",
     "@nestjs/websockets": "latest",
-    "@next/swc-win32-x64-msvc": "^15.5.7",
     "@prisma/client": "latest",
     "@radix-ui/react-accordion": "latest",
     "@radix-ui/react-alert-dialog": "latest",
