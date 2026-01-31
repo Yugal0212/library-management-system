@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Eye, EyeOff, Library, Sparkles, Award, ArrowRight, Shield } from "lucide-react"
+import { Eye, EyeOff, Library, Sparkles, Award, ArrowRight, Shield, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { apiFetch } from "@/lib/http"
 import { setUserInLocalStorage, clearAuthData, setTokens } from "@/lib/auth"
@@ -19,6 +19,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const isSubmittingRef = useRef(false) // Prevent double submission
   const [loginData, setLoginData] = useState({
     email: "",
     password: "",
@@ -26,6 +27,13 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Prevent double submission
+    if (isSubmittingRef.current || isLoading) {
+      return
+    }
+
+    isSubmittingRef.current = true
     setIsLoading(true)
     setError(null)
 
@@ -87,6 +95,7 @@ export default function LoginPage() {
       })
     } finally {
       setIsLoading(false)
+      isSubmittingRef.current = false
     }
   }
 
@@ -151,6 +160,7 @@ export default function LoginPage() {
                         onChange={(e) => setLoginData((prev) => ({ ...prev, email: e.target.value }))}
                         placeholder="Enter your email"
                         required
+                        disabled={isLoading}
                         className="mt-1"
                       />
                     </div>
@@ -166,15 +176,18 @@ export default function LoginPage() {
                           onChange={(e) => setLoginData((prev) => ({ ...prev, password: e.target.value }))}
                           placeholder="Enter your password"
                           required
+                          disabled={isLoading}
                         />
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="absolute right-0 top-0 h-full px-3"
+                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
                           onClick={() => setShowPassword(!showPassword)}
+                          disabled={isLoading}
+                          tabIndex={-1}
                         >
-                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          {showPassword ? <EyeOff className="h-4 w-4 text-gray-400" /> : <Eye className="h-4 w-4 text-gray-400" />}
                         </Button>
                       </div>
                     </div>
@@ -197,12 +210,20 @@ export default function LoginPage() {
 
                     <Button
                       type="submit"
+                      disabled={isLoading}
                       className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-300"
-                      loading={isLoading}
-                      loadingText="Signing In..."
                     >
-                      Sign In
-                      <ArrowRight className="ml-2 h-4 w-4" />
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Signing In...
+                        </>
+                      ) : (
+                        <>
+                          Sign In
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </>
+                      )}
                     </Button>
                   </form>
                 </TabsContent>

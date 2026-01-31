@@ -1,5 +1,3 @@
-"use client"
-
 import type React from "react"
 
 import { useState } from "react"
@@ -12,6 +10,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { Label } from "@/components/ui/label"
 import { verifyEmail } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
+import { setUserInLocalStorage, setTokens } from "@/lib/auth"
 
 export default function VerifyEmailPage() {
   const searchParams = useSearchParams()
@@ -28,7 +27,7 @@ export default function VerifyEmailPage() {
     setIsLoading(true)
     try {
       if (otp.length !== 4) throw new Error("Enter the 4-digit OTP")
-      const result = await verifyEmail({ email, otp })
+      const result: any = await verifyEmail({ email, otp })
       
       // Handle different flows based on role
       if (roleParam === "librarian") {
@@ -38,11 +37,29 @@ export default function VerifyEmailPage() {
         })
         router.push("/auth/success?type=pending")
       } else {
-        toast({ 
-          title: "Email verified", 
-          description: "You can now sign in." 
-        })
-        router.push("/auth/login")
+        // For patrons: auto-login after email verification
+        if (result.user && result.accessToken && result.refreshToken) {
+          // Store user and tokens
+          setUserInLocalStorage(result.user)
+          setTokens(result.accessToken, result.refreshToken)
+          
+          toast({ 
+            title: "Email verified successfully", 
+            description: `Welcome ${result.user.name}! Redirecting to your dashboard...` 
+          })
+          
+          // Redirect to patron dashboard
+          setTimeout(() => {
+            window.location.href = "/dashboard/patron"
+          }, 500)
+        } else {
+          // Fallback: redirect to login if tokens not provided
+          toast({ 
+            title: "Email verified", 
+            description: "Please sign in to continue." 
+          })
+          router.push("/auth/login")
+        }
       }
     } catch (err: any) {
       toast({

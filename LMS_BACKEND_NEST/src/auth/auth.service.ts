@@ -80,8 +80,10 @@ export class AuthService {
       await this.mailer.sendOtpEmail(dto.email, 'Verify your email', otp);
       
       return { 
-        message: 'Registration initiated. Please verify your email first.',
-        isLibrarian: true
+        message: 'Registration initiated. Please verify your email first, then await admin approval.',
+        isLibrarian: true,
+        isVerified: false,
+        requiresApproval: true
       };
     } else {
       // For regular users, proceed with normal registration
@@ -106,8 +108,10 @@ export class AuthService {
       await this.mailer.sendOtpEmail(dto.email, 'Verify your email', otp);
       
       return { 
-        message: 'Registration successful. Please verify your email.',
-        isLibrarian: false
+        message: 'Registration successful. Please verify your email to access your account.',
+        isLibrarian: false,
+        isVerified: false,
+        requiresApproval: false
       };
     }
   }
@@ -136,11 +140,34 @@ export class AuthService {
       if (new Date() > user.otpExpiry)
         throw new BadRequestException('OTP expired');
 
-      await this.prisma.user.update({
+      const updatedUser = await this.prisma.user.update({
         where: { id: user.id },
         data: { isVerified: true, otp: null, otpExpiry: null },
       });
-      return { message: 'Email verified successfully' };
+      
+      // Generate tokens for auto-login after verification
+      const { accessToken, refreshToken } = await this.signTokens({
+        id: updatedUser.id,
+        email: updatedUser.email,
+        role: updatedUser.role as any,
+      });
+      
+      // Update refresh token in database
+      await this.prisma.user.update({
+        where: { id: updatedUser.id },
+        data: { refreshToken },
+      });
+      
+      // Remove sensitive data
+      const { password, otp: _, otpExpiry: __, refreshToken: ___, ...userInfo } = updatedUser;
+      
+      return { 
+        message: 'Email verified successfully. You are now logged in.',
+        user: userInfo,
+        accessToken,
+        refreshToken,
+        isLibrarian: false
+      };
     } else if (pendingLibrarian) {
       // Handle pending librarian verification
       if (!pendingLibrarian.otp || !pendingLibrarian.otpExpiry)

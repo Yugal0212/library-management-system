@@ -95,7 +95,12 @@ export async function register(input: {
   password: string
   role: User["role"]
 }) {
-  return apiFetch<{ message: string }>("/auth/register", {
+  return apiFetch<{ 
+    message: string;
+    isLibrarian?: boolean;
+    isVerified?: boolean;
+    requiresApproval?: boolean;
+  }>("/auth/register", {
     method: "POST",
     json: input,
   })
@@ -117,7 +122,13 @@ export async function createPatron(input: {
 }
 
 export async function verifyEmail(input: { email: string; otp: string }) {
-  return apiFetch<{ message: string }>("/auth/verify-email", {
+  return apiFetch<{ 
+    message: string; 
+    user?: User; 
+    accessToken?: string; 
+    refreshToken?: string;
+    isLibrarian?: boolean;
+  }>("/auth/verify-email", {
     method: "POST",
     json: input,
   })
