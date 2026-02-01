@@ -43,26 +43,30 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
-    // Check if email exists in either users or pending librarians
+    // Check if email exists in users, pending users, or pending librarians
     const exists = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
-    const pendingExists = await this.prisma.pendingLibrarian.findUnique({
+    const pendingUser = await this.prisma.pendingUser.findUnique({
       where: { email: dto.email },
     });
-    if (exists || pendingExists) throw new BadRequestException('Email already in use');
+    const pendingLibrarian = await this.prisma.pendingLibrarian.findUnique({
+      where: { email: dto.email },
+    });
+    
+    if (exists || pendingUser || pendingLibrarian) {
+      throw new BadRequestException('Email already in use');
+    }
 
     const isLibrarian = dto.role === 'LIBRARIAN';
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     const metadata = dto.metadata ? JSON.parse(JSON.stringify(dto.metadata)) : {};
+    const otp = this.generateOtp();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     if (isLibrarian) {
-      // For librarians, first create a pending registration
-      const otp = this.generateOtp();
-      const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-      // Create pending librarian record
+      // For librarians, create pending registration (needs admin approval)
       await this.prisma.pendingLibrarian.create({
         data: {
           email: dto.email,
@@ -76,13 +80,12 @@ export class AuthService {
         },
       });
 
-      // Send OTP for email verification (don't fail registration if email fails)
+      // Send OTP for email verification
       try {
         await this.mailer.sendOtpEmail(dto.email, 'Verify your email', otp);
         console.log(`OTP email sent successfully to ${dto.email}`);
       } catch (emailError) {
         console.error('Failed to send OTP email:', emailError);
-        // Log OTP to console for development/testing
         console.log(`OTP for ${dto.email}: ${otp}`);
       }
       
@@ -93,36 +96,31 @@ export class AuthService {
         requiresApproval: true
       };
     } else {
-      // For regular users, proceed with normal registration
-      const otp = this.generateOtp();
-      const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
-
-      // Create the user directly
-      const user = await this.prisma.user.create({
+      // For patrons, create pending user (auto-approved after email verification)
+      await this.prisma.pendingUser.create({
         data: {
           email: dto.email,
           name: dto.name,
           password: hashedPassword,
           role: dto.role,
-          isVerified: false,
           metadata,
           otp,
           otpExpiry,
+          expiresAt,
         },
       });
 
-      // Send OTP email (don't fail registration if email fails)
+      // Send OTP email
       try {
         await this.mailer.sendOtpEmail(dto.email, 'Verify your email', otp);
         console.log(`OTP email sent successfully to ${dto.email}`);
       } catch (emailError) {
         console.error('Failed to send OTP email:', emailError);
-        // Log OTP to console for development/testing
         console.log(`OTP for ${dto.email}: ${otp}`);
       }
       
       return { 
-        message: 'Registration successful. Please verify your email to access your account.',
+        message: 'Registration successful. Please verify your email to complete registration.',
         isLibrarian: false,
         isVerified: false,
         requiresApproval: false
@@ -131,7 +129,10 @@ export class AuthService {
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
-    // Check both regular users and pending librarians
+    // Check pending users, regular users, and pending librarians
+    const pendingUser = await this.prisma.pendingUser.findUnique({
+      where: { email: dto.email },
+    });
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -139,12 +140,72 @@ export class AuthService {
       where: { email: dto.email },
     });
 
-    if (!user && !pendingLibrarian) {
+    if (!pendingUser && !user && !pendingLibrarian) {
       throw new BadRequestException('Invalid email');
     }
 
+    // Handle pending user verification (patrons)
+    if (pendingUser) {
+      if (!pendingUser.otp || !pendingUser.otpExpiry) {
+        throw new BadRequestException('No OTP generated');
+      }
+      if (pendingUser.otp !== dto.otp) {
+        throw new BadRequestException('Invalid OTP');
+      }
+      if (new Date() > pendingUser.otpExpiry) {
+        throw new BadRequestException('OTP expired');
+      }
+      if (new Date() > pendingUser.expiresAt) {
+        throw new BadRequestException('Registration expired. Please register again.');
+      }
+
+      // Move from PendingUser to User table
+      const newUser = await this.prisma.user.create({
+        data: {
+          email: pendingUser.email,
+          name: pendingUser.name,
+          password: pendingUser.password,
+          role: pendingUser.role,
+          isVerified: true,
+          metadata: pendingUser.metadata || {},
+        },
+      });
+
+      // Delete from pending table
+      await this.prisma.pendingUser.delete({
+        where: { id: pendingUser.id },
+      });
+
+      // Generate tokens for auto-login
+      const { accessToken, refreshToken } = await this.signTokens({
+        id: newUser.id,
+        email: newUser.email,
+        role: newUser.role as any,
+      });
+
+      // Update refresh token in database
+      await this.prisma.user.update({
+        where: { id: newUser.id },
+        data: { refreshToken },
+      });
+
+      // Log activity (commenting out for now - can be added later)
+      // await this.transactionService.logActivity(...);
+
+      // Remove sensitive data
+      const { password, refreshToken: ___, ...userInfo } = newUser;
+
+      return {
+        message: 'Email verified successfully. You are now logged in.',
+        user: userInfo,
+        accessToken,
+        refreshToken,
+        isLibrarian: false,
+      };
+    }
+
     if (user) {
-      // Handle regular user verification
+      // Handle regular user verification (legacy - shouldn't happen with new flow)
       if (!user.otp || !user.otpExpiry)
         throw new BadRequestException('No OTP generated');
       if (user.isVerified) 
@@ -182,7 +243,9 @@ export class AuthService {
         refreshToken,
         isLibrarian: false
       };
-    } else if (pendingLibrarian) {
+    }
+
+    if (pendingLibrarian) {
       // Handle pending librarian verification
       if (!pendingLibrarian.otp || !pendingLibrarian.otpExpiry)
         throw new BadRequestException('No OTP generated');
@@ -226,6 +289,8 @@ export class AuthService {
         isLibrarian: true
       };
     }
+
+    throw new BadRequestException('Invalid email');
   }
 
   async login(dto: LoginDto) {
