@@ -76,8 +76,15 @@ export class AuthService {
         },
       });
 
-      // Send OTP for email verification
-      await this.mailer.sendOtpEmail(dto.email, 'Verify your email', otp);
+      // Send OTP for email verification (don't fail registration if email fails)
+      try {
+        await this.mailer.sendOtpEmail(dto.email, 'Verify your email', otp);
+        console.log(`OTP email sent successfully to ${dto.email}`);
+      } catch (emailError) {
+        console.error('Failed to send OTP email:', emailError);
+        // Log OTP to console for development/testing
+        console.log(`OTP for ${dto.email}: ${otp}`);
+      }
       
       return { 
         message: 'Registration initiated. Please verify your email first, then await admin approval.',
@@ -104,8 +111,15 @@ export class AuthService {
         },
       });
 
-      // Send OTP email
-      await this.mailer.sendOtpEmail(dto.email, 'Verify your email', otp);
+      // Send OTP email (don't fail registration if email fails)
+      try {
+        await this.mailer.sendOtpEmail(dto.email, 'Verify your email', otp);
+        console.log(`OTP email sent successfully to ${dto.email}`);
+      } catch (emailError) {
+        console.error('Failed to send OTP email:', emailError);
+        // Log OTP to console for development/testing
+        console.log(`OTP for ${dto.email}: ${otp}`);
+      }
       
       return { 
         message: 'Registration successful. Please verify your email to access your account.',

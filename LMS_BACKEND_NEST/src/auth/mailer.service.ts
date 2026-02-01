@@ -3,17 +3,38 @@ import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class MailerService {
-  private transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: Number(process.env.EMAIL_PORT || 587),
-    secure: Number(process.env.EMAIL_PORT) === 465,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
+  private transporter: nodemailer.Transporter;
+  private emailConfigured: boolean;
+
+  constructor() {
+    // Check if email is properly configured
+    this.emailConfigured = !!(
+      process.env.EMAIL_HOST &&
+      process.env.EMAIL_USER &&
+      process.env.EMAIL_PASS
+    );
+
+    if (this.emailConfigured) {
+      this.transporter = nodemailer.createTransport({
+        host: process.env.EMAIL_HOST,
+        port: Number(process.env.EMAIL_PORT || 587),
+        secure: Number(process.env.EMAIL_PORT) === 465,
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
+        },
+      });
+    } else {
+      console.warn('Email service not configured. OTPs will be logged to console.');
+    }
+  }
 
   async sendOtpEmail(to: string, subject: string, otp: string) {
+    if (!this.emailConfigured) {
+      console.log(`[EMAIL NOT CONFIGURED] OTP for ${to}: ${otp}`);
+      return;
+    }
+
     const html = `<p>Your verification code is <b>${otp}</b>. It expires in 10 minutes.</p>`;
     await this.transporter.sendMail({
       from: process.env.EMAIL_USER,
