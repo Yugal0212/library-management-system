@@ -94,6 +94,7 @@ export async function register(input: {
   email: string
   password: string
   role: User["role"]
+  metadata?: Record<string, any>
 }) {
   return apiFetch<{ 
     message: string;

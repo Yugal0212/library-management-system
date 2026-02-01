@@ -56,16 +56,6 @@ export class RegisterDto {
 
   @IsOptional()
   @IsObject()
-  @ValidateNested()
-  @Type(() => LibrarianMetadata, {
-    discriminator: {
-      property: 'role',
-      subTypes: [
-        { value: LibrarianMetadata, name: 'LIBRARIAN' },
-        { value: PatronMetadata, name: 'STUDENT' }
-      ]
-    }
-  })
-  metadata?: LibrarianMetadata | PatronMetadata;
+  metadata?: Record<string, any>;
 }
 
