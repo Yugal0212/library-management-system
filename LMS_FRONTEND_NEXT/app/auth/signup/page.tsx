@@ -166,29 +166,37 @@ export default function SignupPage() {
 
       const name = `${formData.firstName.trim()} ${formData.lastName.trim()}`
       
-      // Prepare metadata based on role
-      const metadata: any = {}
-      
-      if (selectedRole === "librarian") {
-        metadata.libraryId = formData.libraryId.trim()
-        metadata.department = formData.department.trim()
-        metadata.reason = formData.reason.trim()
-        if (formData.phone.trim()) metadata.phone = formData.phone.trim()
-        if (formData.address.trim()) metadata.address = formData.address.trim()
-      } else if (selectedRole === "patron") {
-        if (formData.studentId.trim()) metadata.studentId = formData.studentId.trim()
-        if (formData.department.trim()) metadata.department = formData.department.trim()
-        if (formData.phone.trim()) metadata.phone = formData.phone.trim()
-        if (formData.address.trim()) metadata.address = formData.address.trim()
-      }
-      
-      const result = await register({
+      // Prepare registration payload
+      const payload: any = {
         name,
         email: formData.email.trim(),
         password: formData.password,
         role: roleMap as any,
-        ...(Object.keys(metadata).length > 0 && { metadata }),
-      })
+      }
+      
+      // Add metadata based on role
+      if (selectedRole === "librarian") {
+        payload.metadata = {
+          libraryId: formData.libraryId.trim(),
+          department: formData.department.trim(),
+          reason: formData.reason.trim(),
+        }
+        if (formData.phone.trim()) payload.metadata.phone = formData.phone.trim()
+        if (formData.address.trim()) payload.metadata.address = formData.address.trim()
+      } else if (selectedRole === "patron") {
+        // For patrons, only add metadata if at least one field is filled
+        const patronMeta: any = {}
+        if (formData.studentId.trim()) patronMeta.studentId = formData.studentId.trim()
+        if (formData.department.trim()) patronMeta.department = formData.department.trim()
+        if (formData.phone.trim()) patronMeta.phone = formData.phone.trim()
+        if (formData.address.trim()) patronMeta.address = formData.address.trim()
+        
+        if (Object.keys(patronMeta).length > 0) {
+          payload.metadata = patronMeta
+        }
+      }
+      
+      const result = await register(payload)
 
       // Use backend message in toast
       toast({
