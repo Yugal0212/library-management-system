@@ -101,6 +101,8 @@ export async function register(input: {
     isLibrarian?: boolean;
     isVerified?: boolean;
     requiresApproval?: boolean;
+    emailSent?: boolean;
+    otp?: string;
   }>("/auth/register", {
     method: "POST",
     json: input,

@@ -27,7 +27,9 @@ model User {
   reservations Reservation[]
   transactions Transaction[]
 
+  @@index([email])
   @@index([name])
+  @@index([role])
 }
 
 model PendingLibrarian {
@@ -62,6 +64,7 @@ model PendingUser {
   expiresAt DateTime  // Registration expires after 24 hours if not verified
 
   @@index([email])
+  @@index([expiresAt])
 }
 
 model LibraryItem {

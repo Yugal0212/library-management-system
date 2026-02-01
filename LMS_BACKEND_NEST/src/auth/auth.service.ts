@@ -43,23 +43,19 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
-    // Check if email exists in users, pending users, or pending librarians
-    const exists = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
-    const pendingUser = await this.prisma.pendingUser.findUnique({
-      where: { email: dto.email },
-    });
-    const pendingLibrarian = await this.prisma.pendingLibrarian.findUnique({
-      where: { email: dto.email },
-    });
+    const isLibrarian = dto.role === 'LIBRARIAN';
+    
+    // Parallelize email checks and password hashing for faster response
+    const [exists, pendingUser, pendingLibrarian, hashedPassword] = await Promise.all([
+      this.prisma.user.findUnique({ where: { email: dto.email } }),
+      this.prisma.pendingUser.findUnique({ where: { email: dto.email } }),
+      this.prisma.pendingLibrarian.findUnique({ where: { email: dto.email } }),
+      bcrypt.hash(dto.password, 8), // Reduced from 10 to 8 rounds for 4x faster hashing
+    ]);
     
     if (exists || pendingUser || pendingLibrarian) {
       throw new BadRequestException('Email already in use');
     }
-
-    const isLibrarian = dto.role === 'LIBRARIAN';
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
     const metadata = dto.metadata ? JSON.parse(JSON.stringify(dto.metadata)) : {};
     const otp = this.generateOtp();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -82,19 +78,26 @@ export class AuthService {
 
       // Send OTP for email verification
       try {
-        await this.mailer.sendOtpEmail(dto.email, 'Verify your email', otp);
-        console.log(`OTP email sent successfully to ${dto.email}`);
+        await this.mailer.sendOtpEmail(dto.email, 'Verify Your Library Account', otp);
+        return { 
+          message: 'Registration initiated! Check your email for the verification code.',
+          isLibrarian: true,
+          isVerified: false,
+          requiresApproval: true,
+          emailSent: true
+        };
       } catch (emailError) {
-        console.error('Failed to send OTP email:', emailError);
-        console.log(`OTP for ${dto.email}: ${otp}`);
+        console.error('Email sending failed:', emailError.message);
+        // Still return success but with fallback message
+        return { 
+          message: `Registration initiated. Verification code: ${otp} (Email delivery failed - use this code to verify)`,
+          isLibrarian: true,
+          isVerified: false,
+          requiresApproval: true,
+          emailSent: false,
+          otp // Include OTP in response as fallback
+        };
       }
-      
-      return { 
-        message: 'Registration initiated. Please verify your email first, then await admin approval.',
-        isLibrarian: true,
-        isVerified: false,
-        requiresApproval: true
-      };
     } else {
       // For patrons, create pending user (auto-approved after email verification)
       await this.prisma.pendingUser.create({
@@ -112,19 +115,26 @@ export class AuthService {
 
       // Send OTP email
       try {
-        await this.mailer.sendOtpEmail(dto.email, 'Verify your email', otp);
-        console.log(`OTP email sent successfully to ${dto.email}`);
+        await this.mailer.sendOtpEmail(dto.email, 'Verify Your Library Account', otp);
+        return { 
+          message: 'Registration successful! Check your email for the verification code.',
+          isLibrarian: false,
+          isVerified: false,
+          requiresApproval: false,
+          emailSent: true
+        };
       } catch (emailError) {
-        console.error('Failed to send OTP email:', emailError);
-        console.log(`OTP for ${dto.email}: ${otp}`);
+        console.error('Email sending failed:', emailError.message);
+        // Still return success but with fallback message
+        return { 
+          message: `Registration successful. Verification code: ${otp} (Email delivery failed - use this code to verify)`,
+          isLibrarian: false,
+          isVerified: false,
+          requiresApproval: false,
+          emailSent: false,
+          otp // Include OTP in response as fallback
+        };
       }
-      
-      return { 
-        message: 'Registration successful. Please verify your email to complete registration.',
-        isLibrarian: false,
-        isVerified: false,
-        requiresApproval: false
-      };
     }
   }
 
@@ -297,28 +307,32 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
-    if (!user) throw new UnauthorizedException('Invalid credentials');
-    if (!user.isVerified) throw new UnauthorizedException('Email not verified');
+    
+    if (!user) throw new UnauthorizedException('Invalid email or password');
+    if (!user.isVerified) throw new UnauthorizedException('Please verify your email first');
 
     const valid = await bcrypt.compare(dto.password, user.password);
-    if (!valid) throw new UnauthorizedException('Invalid credentials');
+    if (!valid) throw new UnauthorizedException('Invalid email or password');
 
+    // Generate tokens and update refresh token in parallel
     const { accessToken, refreshToken } = await this.signTokens({
       id: user.id,
       email: user.email,
       role: user.role as any,
     });
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { refreshToken },
-    });
-
-    // Log successful login
-    await this.transactionService.logActivity(
-      user.id,
-      ActivityType.USER_ACTIVATED,
-      `User logged in successfully`
-    );
+    
+    // Update refresh token and log activity in parallel (non-blocking)
+    Promise.all([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { refreshToken },
+      }),
+      this.transactionService.logActivity(
+        user.id,
+        ActivityType.USER_ACTIVATED,
+        `User logged in successfully`
+      ),
+    ]).catch(err => console.error('Background login tasks failed:', err));
 
     // Remove sensitive information from user object
     const { password, otp, otpExpiry, refreshToken: _, ...userInfo } = user;

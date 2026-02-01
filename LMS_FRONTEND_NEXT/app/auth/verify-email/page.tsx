@@ -20,9 +20,13 @@ export default function VerifyEmailPage() {
   const { toast } = useToast()
   const emailParam = searchParams.get("email") || ""
   const roleParam = searchParams.get("role") || ""
+  const otpParam = searchParams.get("otp") || "" // Get OTP from URL if email failed
   const [email, setEmail] = useState(emailParam)
-  const [otp, setOtp] = useState("")
+  const [otp, setOtp] = useState(otpParam)
   const [isLoading, setIsLoading] = useState(false)
+
+  // Show warning if OTP is pre-filled (means email sending failed)
+  const emailFailed = !!otpParam
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,7 +38,7 @@ export default function VerifyEmailPage() {
       // Handle different flows based on role
       if (roleParam === "librarian") {
         toast({ 
-          title: "Email verified successfully", 
+          title: "✓ Email verified successfully", 
           description: "Your registration is pending admin approval. You will receive an email once approved." 
         })
         router.push("/auth/success?type=pending")
@@ -46,7 +50,7 @@ export default function VerifyEmailPage() {
           setTokens(result.accessToken, result.refreshToken)
           
           toast({ 
-            title: "Email verified successfully", 
+            title: "✓ Email verified successfully", 
             description: `Welcome ${result.user.name}! Redirecting to your dashboard...` 
           })
           
@@ -57,16 +61,29 @@ export default function VerifyEmailPage() {
         } else {
           // Fallback: redirect to login if tokens not provided
           toast({ 
-            title: "Email verified", 
+            title: "✓ Email verified", 
             description: "Please sign in to continue." 
           })
           router.push("/auth/login")
         }
       }
     } catch (err: any) {
+      console.error("Verification error:", err)
+      
+      let errorMsg = "Invalid or expired OTP."
+      if (err?.message) {
+        if (err.message.includes("Invalid OTP")) {
+          errorMsg = "The code you entered is incorrect. Please check and try again."
+        } else if (err.message.includes("expired")) {
+          errorMsg = "This code has expired. Please register again to get a new code."
+        } else {
+          errorMsg = err.message
+        }
+      }
+      
       toast({
-        title: "Verification failed",
-        description: err?.message || "Invalid or expired OTP.",
+        title: "✗ Verification failed",
+        description: errorMsg,
         variant: "destructive",
       })
     } finally {
@@ -84,6 +101,11 @@ export default function VerifyEmailPage() {
             </div>
             <CardTitle className="text-2xl">Verify your email</CardTitle>
             <CardDescription>
+              {emailFailed && (
+                <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-xs">
+                  ⚠ Email delivery issue - Your code is shown below
+                </div>
+              )}
               {roleParam === "librarian" 
                 ? "Enter the 4‑digit OTP we sent to your email. After verification, your request will be sent for admin approval."
                 : "Enter the 4‑digit OTP we sent to your email"}

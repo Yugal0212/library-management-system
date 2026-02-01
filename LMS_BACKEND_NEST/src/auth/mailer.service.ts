@@ -29,19 +29,48 @@ export class MailerService {
     }
   }
 
-  async sendOtpEmail(to: string, subject: string, otp: string) {
+  async sendOtpEmail(to: string, subject: string, otp: string, retryCount = 0): Promise<void> {
     if (!this.emailConfigured) {
       console.log(`[EMAIL NOT CONFIGURED] OTP for ${to}: ${otp}`);
       return;
     }
 
-    const html = `<p>Your verification code is <b>${otp}</b>. It expires in 10 minutes.</p>`;
-    await this.transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to,
-      subject,
-      html,
-    });
+    const html = `
+      <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #4F46E5;">Email Verification</h2>
+        <p>Your verification code is:</p>
+        <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0;">
+          <h1 style="color: #1F2937; margin: 0; font-size: 32px; letter-spacing: 4px;">${otp}</h1>
+        </div>
+        <p style="color: #6B7280;">This code will expire in 10 minutes.</p>
+        <p style="color: #6B7280; font-size: 12px;">If you didn't request this code, please ignore this email.</p>
+      </div>
+    `;
+
+    try {
+      console.log(`Attempting to send OTP to ${to} (attempt ${retryCount + 1}/3)`);
+      const info = await this.transporter.sendMail({
+        from: `"Library Management System" <${process.env.EMAIL_USER}>`,
+        to,
+        subject,
+        html,
+      });
+      console.log(`✓ OTP email sent successfully to ${to}. Message ID: ${info.messageId}`);
+    } catch (error) {
+      console.error(`✗ Failed to send OTP email to ${to}:`, error.message);
+      
+      // Retry up to 3 times with exponential backoff
+      if (retryCount < 2) {
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.sendOtpEmail(to, subject, otp, retryCount + 1);
+      }
+      
+      // After all retries failed, log OTP to console as fallback
+      console.error(`CRITICAL: Failed to send OTP after 3 attempts. OTP for ${to}: ${otp}`);
+      throw new Error(`Failed to send OTP email: ${error.message}`);
+    }
   }
 
   async sendLibrarianRequestNotification(adminEmail: string, librarianName: string, librarianEmail: string) {

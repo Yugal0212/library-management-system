@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { register } from "@/lib/api"
@@ -50,7 +50,7 @@ export default function SignupPage() {
     reason: "",
   })
 
-  const roles = [
+  const roles = useMemo(() => [
     {
       id: "patron",
       title: "Library Patron",
@@ -84,7 +84,7 @@ export default function SignupPage() {
       available: false,
       note: "⚠ Contact system administrator",
     },
-  ]
+  ], [])
 
   const handleInputChange = useCallback((field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -158,60 +158,82 @@ export default function SignupPage() {
 
     try {
       // Map UI role to backend enum
-      const roleMap = {
+      const roleMap: Record<string, string> = {
         librarian: "LIBRARIAN",
         admin: "ADMIN",
         patron: "STUDENT"
-      }[selectedRole] || "STUDENT"
+      }
 
       const name = `${formData.firstName.trim()} ${formData.lastName.trim()}`
       
-      // Prepare registration payload
-      const payload: any = {
-        name,
-        email: formData.email.trim(),
-        password: formData.password,
-        role: roleMap as any,
-      }
+      // Add metadata only if fields exist (reduce payload size)
+      const metadata: Record<string, string> = {}
       
-      // Add metadata based on role
       if (selectedRole === "librarian") {
-        payload.metadata = {
-          libraryId: formData.libraryId.trim(),
-          department: formData.department.trim(),
-          reason: formData.reason.trim(),
-        }
-        if (formData.phone.trim()) payload.metadata.phone = formData.phone.trim()
-        if (formData.address.trim()) payload.metadata.address = formData.address.trim()
+        metadata.libraryId = formData.libraryId.trim()
+        metadata.department = formData.department.trim()
+        metadata.reason = formData.reason.trim()
+        if (formData.phone.trim()) metadata.phone = formData.phone.trim()
+        if (formData.address.trim()) metadata.address = formData.address.trim()
       } else if (selectedRole === "patron") {
-        // For patrons, only add metadata if at least one field is filled
-        const patronMeta: any = {}
-        if (formData.studentId.trim()) patronMeta.studentId = formData.studentId.trim()
-        if (formData.department.trim()) patronMeta.department = formData.department.trim()
-        if (formData.phone.trim()) patronMeta.phone = formData.phone.trim()
-        if (formData.address.trim()) patronMeta.address = formData.address.trim()
-        
-        if (Object.keys(patronMeta).length > 0) {
-          payload.metadata = patronMeta
-        }
+        if (formData.studentId.trim()) metadata.studentId = formData.studentId.trim()
+        if (formData.department.trim()) metadata.department = formData.department.trim()
+        if (formData.phone.trim()) metadata.phone = formData.phone.trim()
+        if (formData.address.trim()) metadata.address = formData.address.trim()
       }
       
-      const result = await register(payload)
+      const result = await register({
+        name,
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        role: roleMap[selectedRole] as "LIBRARIAN" | "ADMIN" | "STUDENT" | "TEACHER",
+        ...(Object.keys(metadata).length > 0 && { metadata })
+      })
 
-      // Use backend message in toast
+      // Show appropriate success message
+      const title = result.isLibrarian ? "✓ Registration Initiated" : "✓ Registration Successful"
+      const description = result.message
+      const variant = result.emailSent === false ? "default" : "default"
+
       toast({
-        title: result.isLibrarian ? "Registration Initiated" : "Registration Successful",
-        description: result.message,
+        title,
+        description,
+        duration: result.emailSent === false ? 10000 : 5000, // Longer duration if email failed
       })
       
-      // Navigate to verification page
-      router.push(`/auth/verify-email?email=${encodeURIComponent(formData.email)}&role=${selectedRole}`)
+      // Navigate to verification page immediately
+      const params = new URLSearchParams({
+        email: formData.email.trim().toLowerCase(),
+        role: selectedRole
+      })
+      
+      // Add OTP to URL if provided (fallback when email fails)
+      if (result.otp) {
+        params.append('otp', result.otp)
+      }
+      
+      router.push(`/auth/verify-email?${params.toString()}`)
     } catch (err: any) {
       console.error("Registration error:", err)
+      
+      // Parse error message
+      let errorMessage = "Please review your details and try again."
+      
+      if (err?.message) {
+        if (err.message.includes("already in use")) {
+          errorMessage = "This email is already registered. Please use a different email or try logging in."
+        } else if (err.message.includes("network") || err.message.includes("fetch")) {
+          errorMessage = "Network error. Please check your connection and try again."
+        } else {
+          errorMessage = err.message
+        }
+      }
+      
       toast({
-        title: "Registration Failed",
-        description: err?.message || "Please review your details and try again.",
+        title: "✗ Registration Failed",
+        description: errorMessage,
         variant: "destructive",
+        duration: 7000,
       })
     } finally {
       setIsLoading(false)
@@ -219,109 +241,111 @@ export default function SignupPage() {
     }
   }
 
-  const getSelectedRole = () => roles.find((role) => role.id === selectedRole)
+  const currentRole = useMemo(() => 
+    roles.find((role) => role.id === selectedRole),
+    [selectedRole, roles]
+  )
 
-  // Role Selection Screen
   if (!selectedRole) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center p-4 relative overflow-hidden">
-        {/* Animated Background */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-purple-600/20 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-green-400/20 to-blue-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-        </div>
-
-        <div className="w-full max-w-5xl relative z-10">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <Link href="/" className="inline-flex items-center space-x-3 mb-6 group">
-              <div className="relative">
-                <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <Library className="h-6 w-6 text-white group-hover:scale-110 transition-transform" />
-                </div>
-                <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-yellow-500 animate-ping" />
-              </div>
-              <div className="text-left">
-                <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  EduLibrary Pro
-                </span>
-                <div className="flex items-center space-x-1">
-                  <Award className="h-3 w-3 text-yellow-500" />
-                  <span className="text-xs text-gray-600">Premium Edition</span>
-                </div>
-              </div>
-            </Link>
-            <h1 className="text-4xl font-bold text-gray-900 mb-3">Join Our Library</h1>
-            <p className="text-lg text-gray-600">Choose your role to get started</p>
+          {/* Animated Background */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-purple-600/20 rounded-full blur-3xl animate-pulse" />
+            <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-green-400/20 to-blue-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
           </div>
 
-          {/* Role Cards */}
-          <div className="grid md:grid-cols-3 gap-6 mb-8">
-            {roles.map((role) => {
-              const IconComponent = role.icon
-              return (
-                <Card
-                  key={role.id}
-                  className={`relative cursor-pointer transition-all duration-300 border-2 ${
-                    role.available
-                      ? `hover:shadow-xl hover:-translate-y-1 ${role.hoverColor} hover:bg-gradient-to-br ${role.bgColor}`
-                      : "opacity-60 cursor-not-allowed"
-                  }`}
-                  onClick={() => role.available && setSelectedRole(role.id)}
-                >
-                  <CardHeader className="text-center pb-4">
-                    <div
-                      className={`mx-auto p-4 rounded-2xl w-16 h-16 flex items-center justify-center mb-4 bg-gradient-to-br ${role.color} shadow-lg`}
-                    >
-                      <IconComponent className="h-8 w-8 text-white" />
-                    </div>
-                    <CardTitle className="text-xl font-bold">{role.title}</CardTitle>
-                    <CardDescription className="text-sm min-h-[2.5rem]">{role.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="text-center">
-                    <div className="text-xs p-3 rounded-lg mb-4 bg-white/80 border">
-                      {role.note}
-                    </div>
-                    <Button
-                      className={`w-full bg-gradient-to-r ${role.color} text-white hover:opacity-90 transition-opacity`}
-                      disabled={!role.available}
-                    >
-                      {role.available ? "Select" : "Unavailable"}
-                    </Button>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-
-          {/* Back to Login */}
-          <div className="text-center">
-            <p className="text-gray-600">
-              Already have an account?{" "}
-              <Link href="/auth/login" className="text-indigo-600 hover:text-indigo-700 font-semibold">
-                Sign in
+          <div className="w-full max-w-5xl relative z-10">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <Link href="/" className="inline-flex items-center space-x-3 mb-6 group">
+                <div className="relative">
+                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <Library className="h-6 w-6 text-white group-hover:scale-110 transition-transform" />
+                  </div>
+                  <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-yellow-500 animate-ping" />
+                </div>
+                <div className="text-left">
+                  <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                    EduLibrary Pro
+                  </span>
+                  <div className="flex items-center space-x-1">
+                    <Award className="h-3 w-3 text-yellow-500" />
+                    <span className="text-xs text-gray-600">Premium Edition</span>
+                  </div>
+                </div>
               </Link>
-            </p>
+              <h1 className="text-4xl font-bold text-gray-900 mb-3">Join Our Library</h1>
+              <p className="text-lg text-gray-600">Choose your role to get started</p>
+            </div>
+
+            {/* Role Cards */}
+            <div className="grid md:grid-cols-3 gap-6 mb-8">
+              {roles.map((role) => {
+                const IconComponent = role.icon
+                return (
+                  <Card
+                    key={role.id}
+                    className={`relative cursor-pointer transition-all duration-300 border-2 ${
+                      role.available
+                        ? `hover:shadow-xl hover:-translate-y-1 ${role.hoverColor} hover:bg-gradient-to-br ${role.bgColor}`
+                        : "opacity-60 cursor-not-allowed"
+                    }`}
+                    onClick={() => role.available && setSelectedRole(role.id)}
+                  >
+                    <CardHeader className="text-center pb-4">
+                      <div
+                        className={`mx-auto p-4 rounded-2xl w-16 h-16 flex items-center justify-center mb-4 bg-gradient-to-br ${role.color} shadow-lg`}
+                      >
+                        <IconComponent className="h-8 w-8 text-white" />
+                      </div>
+                      <CardTitle className="text-xl font-bold">{role.title}</CardTitle>
+                      <CardDescription className="text-sm min-h-[2.5rem]">{role.description}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="text-center">
+                      <div className="text-xs p-3 rounded-lg mb-4 bg-white/80 border">
+                        {role.note}
+                      </div>
+                      <Button
+                        className={`w-full bg-gradient-to-r ${role.color} text-white hover:opacity-90 transition-opacity`}
+                        disabled={!role.available}
+                      >
+                        {role.available ? "Select" : "Unavailable"}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+
+            {/* Back to Login */}
+            <div className="text-center">
+              <p className="text-gray-600">
+                Already have an account?{" "}
+                <Link href="/auth/login" className="text-indigo-600 hover:text-indigo-700 font-semibold">
+                  Sign in
+                </Link>
+              </p>
+            </div>
           </div>
         </div>
-      </div>
-    )
+      )
   }
 
-  const currentRole = getSelectedRole()!
-
   // Registration Form Screen
+  if (!currentRole) return null
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 py-8 px-4 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 py-4 px-4 relative overflow-hidden flex items-center">
       {/* Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-purple-600/20 rounded-full blur-3xl animate-pulse" />
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-green-400/20 to-blue-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
       </div>
 
-      <div className="w-full max-w-3xl mx-auto relative z-10">
+      <div className="w-full max-w-4xl mx-auto relative z-10">
         <Card className="shadow-2xl border-0 bg-white/95 backdrop-blur-sm">
-          <CardHeader className="relative pb-6">
+          <CardHeader className="relative pb-4 pt-6">
             <Button
               variant="ghost"
               size="sm"
@@ -333,21 +357,21 @@ export default function SignupPage() {
               Back
             </Button>
             
-            <div className="flex flex-col items-center pt-8">
-              <div className={`p-3 rounded-2xl mb-4 bg-gradient-to-br ${currentRole.color} shadow-lg`}>
-                <currentRole.icon className="h-8 w-8 text-white" />
+            <div className="flex flex-col items-center pt-4">
+              <div className={`p-2 rounded-xl mb-3 bg-gradient-to-br ${currentRole.color} shadow-lg`}>
+                <currentRole.icon className="h-6 w-6 text-white" />
               </div>
-              <CardTitle className="text-2xl">Register as {currentRole.title}</CardTitle>
-              <CardDescription className="text-center mt-2">{currentRole.description}</CardDescription>
+              <CardTitle className="text-xl">Register as {currentRole.title}</CardTitle>
+              <CardDescription className="text-center mt-1 text-xs">{currentRole.description}</CardDescription>
             </div>
           </CardHeader>
 
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-5">
+          <CardContent className="pb-6">
+            <form onSubmit={handleSubmit} className="space-y-3">
               {/* Name Fields */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label htmlFor="firstName" className="text-sm font-medium">
+                  <Label htmlFor="firstName" className="text-xs font-medium">
                     First Name <span className="text-red-500">*</span>
                   </Label>
                   <Input
@@ -356,12 +380,12 @@ export default function SignupPage() {
                     onChange={(e) => handleInputChange("firstName", e.target.value)}
                     required
                     disabled={isLoading}
-                    className="mt-1.5"
+                    className="mt-1 h-9 text-sm"
                     placeholder="John"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="lastName" className="text-sm font-medium">
+                  <Label htmlFor="lastName" className="text-xs font-medium">
                     Last Name <span className="text-red-500">*</span>
                   </Label>
                   <Input
@@ -370,16 +394,16 @@ export default function SignupPage() {
                     onChange={(e) => handleInputChange("lastName", e.target.value)}
                     required
                     disabled={isLoading}
-                    className="mt-1.5"
+                    className="mt-1 h-9 text-sm"
                     placeholder="Doe"
                   />
                 </div>
               </div>
 
               {/* Email & Phone */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label htmlFor="email" className="text-sm font-medium">
+                  <Label htmlFor="email" className="text-xs font-medium">
                     Email Address <span className="text-red-500">*</span>
                   </Label>
                   <Input
@@ -387,33 +411,43 @@ export default function SignupPage() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => handleInputChange("email", e.target.value)}
+                    onBlur={(e) => {
+                      const email = e.target.value.trim()
+                      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                        e.target.setCustomValidity("Please enter a valid email")
+                      } else {
+                        e.target.setCustomValidity("")
+                      }
+                    }}
                     required
                     disabled={isLoading}
-                    className="mt-1.5"
-                    placeholder="john.doe@example.com"
+                    className="mt-1 h-9 text-sm"
+                    placeholder="john@example.com"
+                    autoComplete="email"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="phone" className="text-sm font-medium">Phone Number</Label>
+                  <Label htmlFor="phone" className="text-xs font-medium">Phone</Label>
                   <Input
                     id="phone"
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => handleInputChange("phone", e.target.value)}
                     disabled={isLoading}
-                    className="mt-1.5"
+                    className="mt-1 h-9 text-sm"
                     placeholder="+1 234 567 8900"
+                    autoComplete="tel"
                   />
                 </div>
               </div>
 
               {/* Password Fields */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label htmlFor="password" className="text-sm font-medium">
+                  <Label htmlFor="password" className="text-xs font-medium">
                     Password <span className="text-red-500">*</span>
                   </Label>
-                  <div className="relative mt-1.5">
+                  <div className="relative mt-1">
                     <Input
                       id="password"
                       type={showPassword ? "text" : "password"}
@@ -421,26 +455,27 @@ export default function SignupPage() {
                       onChange={(e) => handleInputChange("password", e.target.value)}
                       required
                       disabled={isLoading}
-                      placeholder="Min. 6 characters"
+                      placeholder="Min. 6 chars"
+                      className="h-9 text-sm pr-9"
                     />
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                      className="absolute right-0 top-0 h-9 w-9 px-0 hover:bg-transparent"
                       onClick={() => setShowPassword(!showPassword)}
                       disabled={isLoading}
                       tabIndex={-1}
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4 text-gray-400" /> : <Eye className="h-4 w-4 text-gray-400" />}
+                      {showPassword ? <EyeOff className="h-3.5 w-3.5 text-gray-400" /> : <Eye className="h-3.5 w-3.5 text-gray-400" />}
                     </Button>
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="confirmPassword" className="text-sm font-medium">
+                  <Label htmlFor="confirmPassword" className="text-xs font-medium">
                     Confirm Password <span className="text-red-500">*</span>
                   </Label>
-                  <div className="relative mt-1.5">
+                  <div className="relative mt-1">
                     <Input
                       id="confirmPassword"
                       type={showConfirmPassword ? "text" : "password"}
@@ -448,18 +483,19 @@ export default function SignupPage() {
                       onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
                       required
                       disabled={isLoading}
-                      placeholder="Re-enter password"
+                      placeholder="Re-enter"
+                      className="h-9 text-sm pr-9"
                     />
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                      className="absolute right-0 top-0 h-9 w-9 px-0 hover:bg-transparent"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                       disabled={isLoading}
                       tabIndex={-1}
                     >
-                      {showConfirmPassword ? <EyeOff className="h-4 w-4 text-gray-400" /> : <Eye className="h-4 w-4 text-gray-400" />}
+                      {showConfirmPassword ? <EyeOff className="h-3.5 w-3.5 text-gray-400" /> : <Eye className="h-3.5 w-3.5 text-gray-400" />}
                     </Button>
                   </div>
                 </div>
@@ -467,27 +503,27 @@ export default function SignupPage() {
 
               {/* Role-specific fields */}
               {selectedRole === "patron" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label htmlFor="studentId" className="text-sm font-medium">Student/Member ID</Label>
+                    <Label htmlFor="studentId" className="text-xs font-medium">Student ID</Label>
                     <Input
                       id="studentId"
                       value={formData.studentId}
                       onChange={(e) => handleInputChange("studentId", e.target.value)}
                       disabled={isLoading}
-                      className="mt-1.5"
+                      className="mt-1 h-9 text-sm"
                       placeholder="Optional"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="department" className="text-sm font-medium">Department/Field</Label>
+                    <Label htmlFor="department" className="text-xs font-medium">Department</Label>
                     <Input
                       id="department"
                       value={formData.department}
                       onChange={(e) => handleInputChange("department", e.target.value)}
                       disabled={isLoading}
-                      className="mt-1.5"
-                      placeholder="e.g., Computer Science"
+                      className="mt-1 h-9 text-sm"
+                      placeholder="e.g., CS"
                     />
                   </div>
                 </div>
@@ -495,9 +531,9 @@ export default function SignupPage() {
 
               {selectedRole === "librarian" && (
                 <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label htmlFor="libraryId" className="text-sm font-medium">
+                      <Label htmlFor="libraryId" className="text-xs font-medium">
                         Library ID <span className="text-red-500">*</span>
                       </Label>
                       <Input
@@ -506,12 +542,12 @@ export default function SignupPage() {
                         onChange={(e) => handleInputChange("libraryId", e.target.value)}
                         required
                         disabled={isLoading}
-                        className="mt-1.5"
-                        placeholder="Your library ID"
+                        className="mt-1 h-9 text-sm"
+                        placeholder="Library ID"
                       />
                     </div>
                     <div>
-                      <Label htmlFor="department" className="text-sm font-medium">
+                      <Label htmlFor="department" className="text-xs font-medium">
                         Department <span className="text-red-500">*</span>
                       </Label>
                       <Select 
@@ -519,8 +555,8 @@ export default function SignupPage() {
                         disabled={isLoading}
                         required
                       >
-                        <SelectTrigger className="mt-1.5">
-                          <SelectValue placeholder="Select department" />
+                        <SelectTrigger className="mt-1 h-9 text-sm">
+                          <SelectValue placeholder="Select" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="circulation">Circulation</SelectItem>
@@ -534,7 +570,7 @@ export default function SignupPage() {
                     </div>
                   </div>
                   <div>
-                    <Label htmlFor="reason" className="text-sm font-medium">
+                    <Label htmlFor="reason" className="text-xs font-medium">
                       Reason for Access <span className="text-red-500">*</span>
                     </Label>
                     <Textarea
@@ -543,9 +579,9 @@ export default function SignupPage() {
                       onChange={(e) => handleInputChange("reason", e.target.value)}
                       required
                       disabled={isLoading}
-                      className="mt-1.5"
+                      className="mt-1 text-sm"
                       placeholder="Explain your role and why you need librarian access"
-                      rows={3}
+                      rows={2}
                     />
                   </div>
                 </>
@@ -553,40 +589,40 @@ export default function SignupPage() {
 
               {/* Address */}
               <div>
-                <Label htmlFor="address" className="text-sm font-medium">Address</Label>
+                <Label htmlFor="address" className="text-xs font-medium">Address (Optional)</Label>
                 <Textarea
                   id="address"
                   value={formData.address}
                   onChange={(e) => handleInputChange("address", e.target.value)}
                   disabled={isLoading}
-                  className="mt-1.5"
+                  className="mt-1 text-sm"
                   placeholder="Optional"
-                  rows={2}
+                  rows={1}
                 />
               </div>
 
               {/* Notice */}
               <div
-                className={`p-4 rounded-lg border-2 ${
+                className={`p-2.5 rounded-lg border ${
                   selectedRole === "patron"
                     ? "bg-green-50 border-green-200"
                     : "bg-yellow-50 border-yellow-200"
                 }`}
               >
-                <div className="flex items-start space-x-3">
+                <div className="flex items-start space-x-2">
                   {selectedRole === "patron" ? (
-                    <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
                   ) : (
-                    <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                    <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
                   )}
                   <div>
-                    <p className={`font-semibold ${selectedRole === "patron" ? "text-green-800" : "text-yellow-800"}`}>
+                    <p className={`text-xs font-semibold ${selectedRole === "patron" ? "text-green-800" : "text-yellow-800"}`}>
                       {selectedRole === "patron" ? "✓ Instant Access" : "⏳ Approval Required"}
                     </p>
-                    <p className={`text-sm mt-1 ${selectedRole === "patron" ? "text-green-700" : "text-yellow-700"}`}>
+                    <p className={`text-xs mt-0.5 ${selectedRole === "patron" ? "text-green-700" : "text-yellow-700"}`}>
                       {selectedRole === "patron"
-                        ? "Your account will be activated immediately after email verification."
-                        : "Your request will be reviewed by an administrator within 24 hours."}
+                        ? "Account activated after email verification."
+                        : "Review within 24 hours."}
                     </p>
                   </div>
                 </div>
@@ -596,11 +632,11 @@ export default function SignupPage() {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className={`w-full h-12 text-base font-semibold bg-gradient-to-r ${currentRole.color} text-white hover:opacity-90 transition-all shadow-lg`}
+                className={`w-full h-10 text-sm font-semibold bg-gradient-to-r ${currentRole.color} text-white hover:opacity-90 transition-all shadow-lg`}
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Creating Account...
                   </>
                 ) : (
@@ -610,8 +646,8 @@ export default function SignupPage() {
             </form>
 
             {/* Footer */}
-            <div className="mt-6 text-center border-t pt-6">
-              <p className="text-sm text-gray-600">
+            <div className="mt-4 text-center border-t pt-4">
+              <p className="text-xs text-gray-600">
                 Already have an account?{" "}
                 <Link 
                   href="/auth/login" 
