@@ -9,51 +9,52 @@ import cookieParser from 'cookie-parser';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
-  // Enable CORS
+  // Enable CORS with optimized configuration
   app.enableCors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps or curl requests)
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, etc.)
       if (!origin) return callback(null, true);
       
-      // Allow localhost and 127.0.0.1
-      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-        return callback(null, true);
-      }
+      // Define allowed origins
+      const allowedOrigins = [
+        'localhost',
+        '127.0.0.1',
+        '.vercel.app',
+        '.vercel.sh',
+        '.onrender.com',
+        'library-management-system-pi-topaz.vercel.app',
+        'library-management-system-1-lwtd.onrender.com',
+      ];
       
-      // Allow private network ranges
+      // Check if origin matches any allowed pattern
+      const isAllowed = allowedOrigins.some(allowed => origin.includes(allowed));
+      
+      // Also check private network ranges for local development
       const privateNetworkRegex = [
-        /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:3000$/,
-        /^http:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}:3000$/,
-        /^http:\/\/172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}:3000$/,
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/,
+        /^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/,
+        /^https?:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/,
+        /^https?:\/\/172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}(:\d+)?$/,
       ];
       
       const isPrivateNetwork = privateNetworkRegex.some(regex => regex.test(origin));
-      if (isPrivateNetwork) {
+      
+      // Allow if matches any pattern or environment variable
+      if (isAllowed || isPrivateNetwork || (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL)) {
         return callback(null, true);
       }
       
-      // Allow environment variable origin
-      if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) {
-        return callback(null, true);
-      }
-      
-      // Allow Render.com domains
-      if (origin && origin.includes('.onrender.com')) {
-        return callback(null, true);
-      }
-      
-      // Allow Vercel domains
-      if (origin && (origin.includes('.vercel.app') || origin.includes('.vercel.sh'))) {
-        return callback(null, true);
-      }
-      
-      // Reject all other origins
+      // Log rejected origins for debugging
+      console.warn(`CORS rejected origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cookie'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cookie', 'X-Requested-With'],
     exposedHeaders: ['Set-Cookie'],
+    maxAge: 86400, // Cache preflight requests for 24 hours
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   });
   
   app.use(cookieParser());
