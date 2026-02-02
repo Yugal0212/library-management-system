@@ -29,7 +29,7 @@ export default function ResetPasswordPage() {
     try {
       if (password !== confirm) throw new Error("Passwords do not match")
       if (otp.length !== 4) throw new Error("Enter the 4-digit OTP")
-      await resetPassword({ email, otp, newPassword: password })
+      await resetPassword({ email, otp, password })
       toast({ title: "Password reset", description: "You can now sign in with your new password." })
       router.push("/auth/login")
     } catch (err: any) {

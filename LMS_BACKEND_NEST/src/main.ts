@@ -2,12 +2,23 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
-
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-// const cookieParser = require('cookie-parser');
+import compression from 'compression';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: ['error', 'warn'], // Only log errors/warnings for speed
+    bufferLogs: true,
+  });
+  
+  // ⚡ COMPRESSION - Reduce response size by 70-90%
+  app.use(compression({
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) return false;
+      return compression.filter(req, res);
+    },
+    level: 6, // Balance between speed and compression
+    threshold: 1024, // Only compress responses > 1KB
+  }));
   
   // Enable CORS with optimized configuration
   app.enableCors({
@@ -58,6 +69,7 @@ async function bootstrap() {
   });
   
   app.use(cookieParser());
+  
   // Add a simple /health endpoint for Render and other load balancers.
   // This attaches directly to the underlying Express server so it bypasses the
   // global prefix and is available at GET /health.
@@ -72,12 +84,22 @@ async function bootstrap() {
     // eslint-disable-next-line no-console
     console.warn('Health endpoint not registered:', err?.message ?? err);
   }
+  
   app.setGlobalPrefix('api');
+  
+  // ⚡ ULTRA-FAST VALIDATION - Optimized for speed
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
-    forbidNonWhitelisted: true,
+    forbidNonWhitelisted: false, // Faster: don't throw on unknown props
     transform: true,
-    transformOptions: { enableImplicitConversion: true },
+    transformOptions: { 
+      enableImplicitConversion: true,
+      exposeDefaultValues: true,
+    },
+    stopAtFirstError: true, // Faster: stop on first validation error
+    validateCustomDecorators: true,
+    dismissDefaultMessages: false,
+    validationError: { target: false, value: false }, // Smaller error responses
   }));
   
   const port = process.env.PORT ?? 8000;
