@@ -1,9 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import useSWR from "swr"
-import { apiFetch } from "@/lib/http"
-import { getUserFromLocalStorage } from "@/lib/auth"
+import { useEffect, useState, useCallback } from "react"
+import { fastFetch, fastCache } from "@/lib/fast-fetch"
+import { getUserFromLocalStorage, setUserInLocalStorage, clearAuth } from "@/lib/auth"
 
 type User = {
   id: string
@@ -21,77 +20,91 @@ interface AuthResponse {
   user: User | null
   isLoading: boolean
   error?: string
+  refetch?: () => Promise<void>
 }
 
 export function useAuth(): AuthResponse {
+  const [user, setUser] = useState<User | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | undefined>()
   const [mounted, setMounted] = useState(false)
-  const [storedUser, setStoredUserState] = useState<User | null>(null)
 
-  // Handle hydration by ensuring component is mounted
-  useEffect(() => {
-    setMounted(true)
-    // Only access localStorage after component mounts
-    const user = getUserFromLocalStorage()
-    console.log('[useAuth] Component mounted, user from localStorage:', user)
-    setStoredUserState(user as User)
+  const refetch = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const data = await fastFetch<User>(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/me`,
+        { 
+          credentials: 'include',
+          ttl: 5000,
+        }
+      )
+      setUser(data)
+      setUserInLocalStorage(data)
+      setError(undefined)
+    } catch (err: any) {
+      setError(err.message)
+      setUser(null)
+      clearAuth()
+    } finally {
+      setIsLoading(false)
+    }
   }, [])
 
-  // Re-check localStorage when mounted state changes (helps with redirects)
   useEffect(() => {
-    if (mounted) {
-      const checkUser = () => {
-        const user = getUserFromLocalStorage()
-        if (user && JSON.stringify(user) !== JSON.stringify(storedUser)) {
-          console.log('[useAuth] User state updated:', user)
-          setStoredUserState(user as User)
-        }
+    setMounted(true)
+    
+    const cachedUser = getUserFromLocalStorage()
+    if (cachedUser) {
+      setUser(cachedUser as User)
+      setIsLoading(false)
+    }
+
+    const validateToken = async () => {
+      const token = localStorage.getItem('accessToken')
+      if (!token) {
+        setIsLoading(false)
+        return
       }
-      // Check immediately
-      checkUser()
-      // Also set up a small interval to catch updates
-      const interval = setInterval(checkUser, 100)
-      // Clear after 2 seconds (enough time for auth to settle)
-      const timeout = setTimeout(() => clearInterval(interval), 2000)
-      return () => {
-        clearInterval(interval)
-        clearTimeout(timeout)
+
+      try {
+        const data = await fastFetch<User>(
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/me`,
+          { 
+            credentials: 'include',
+            ttl: 5000,
+          }
+        )
+        
+        if (JSON.stringify(data) !== JSON.stringify(cachedUser)) {
+          setUser(data)
+          setUserInLocalStorage(data)
+        }
+      } catch (err: any) {
+        if (err.status === 401) {
+          setUser(null)
+          clearAuth()
+        }
+      } finally {
+        setIsLoading(false)
       }
     }
-  }, [mounted, storedUser])
 
-  // If not mounted yet (SSR), return loading state
+    validateToken()
+  }, [])
+
   if (!mounted) {
-    console.log('[useAuth] Not mounted yet, returning loading state')
     return {
       user: null,
-      isLoading: true
+      isLoading: true,
+      refetch,
     }
   }
-
-  // If we have a stored user, return it immediately
-  if (storedUser) {
-    console.log('[useAuth] Returning stored user:', storedUser)
-    return {
-      user: storedUser,
-      isLoading: false
-    }
-  }
-
-  // If no stored user, try to fetch from API (this will fail if no token)
-  const { data, error, isLoading } = useSWR<User>(
-    '/auth/me',
-    apiFetch,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      shouldRetryOnError: false,
-      errorRetryCount: 0
-    }
-  )
 
   return {
-    user: data || null,
+    user,
     isLoading,
-    error: error?.message
+    error,
+    refetch,
   }
 }

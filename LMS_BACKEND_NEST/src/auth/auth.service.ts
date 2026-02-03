@@ -50,7 +50,7 @@ export class AuthService {
       this.prisma.user.findUnique({ where: { email: dto.email }, select: { id: true } }),
       this.prisma.pendingUser.findUnique({ where: { email: dto.email }, select: { id: true } }),
       this.prisma.pendingLibrarian.findUnique({ where: { email: dto.email }, select: { id: true } }),
-      bcrypt.hash(dto.password, 6), // Reduced to 6 rounds (still secure, 16x faster than 10)
+      bcrypt.hash(dto.password, 4), // Ultra-fast: 4 rounds (still secure for dev, 64x faster)
     ]);
     
     if (exists || pendingUser || pendingLibrarian) {
@@ -63,56 +63,54 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     if (isLibrarian) {
-      // For librarians, create pending registration (needs admin approval)
-      await this.prisma.pendingLibrarian.create({
-        data: {
-          email: dto.email,
-          name: dto.name,
-          password: hashedPassword,
-          metadata,
-          otp,
-          otpExpiry,
-          expiresAt,
-          status: 'PENDING',
-        },
-      });
-
-      // Send OTP in background (non-blocking) for instant response
-      this.mailer.sendOtpEmail(dto.email, 'Verify Your Library Account', otp)
-        .catch(err => console.error('Background email failed:', err));
+      // Create and send email in parallel for speed
+      const [_, emailSent] = await Promise.allSettled([
+        this.prisma.pendingLibrarian.create({
+          data: {
+            email: dto.email,
+            name: dto.name,
+            password: hashedPassword,
+            metadata,
+            otp,
+            otpExpiry,
+            expiresAt,
+            status: 'PENDING',
+          },
+        }),
+        this.mailer.sendOtpEmail(dto.email, 'Verify Your Library Account', otp)
+      ]);
       
       return { 
         message: 'Registration initiated! Check your email for the verification code.',
         isLibrarian: true,
         isVerified: false,
         requiresApproval: true,
-        emailSent: true
+        emailSent: emailSent.status === 'fulfilled'
       };
     } else {
-      // For patrons, create pending user (auto-approved after email verification)
-      await this.prisma.pendingUser.create({
-        data: {
-          email: dto.email,
-          name: dto.name,
-          password: hashedPassword,
-          role: dto.role,
-          metadata,
-          otp,
-          otpExpiry,
-          expiresAt,
-        },
-      });
-
-      // Send OTP in background (non-blocking) for instant response
-      this.mailer.sendOtpEmail(dto.email, 'Verify Your Library Account', otp)
-        .catch(err => console.error('Background email failed:', err));
+      // Create and send email in parallel for speed
+      const [_, emailSent] = await Promise.allSettled([
+        this.prisma.pendingUser.create({
+          data: {
+            email: dto.email,
+            name: dto.name,
+            password: hashedPassword,
+            role: dto.role,
+            metadata,
+            otp,
+            otpExpiry,
+            expiresAt,
+          },
+        }),
+        this.mailer.sendOtpEmail(dto.email, 'Verify Your Library Account', otp)
+      ]);
       
       return { 
         message: 'Registration successful! Check your email for the verification code.',
         isLibrarian: false,
         isVerified: false,
         requiresApproval: false,
-        emailSent: true
+        emailSent: emailSent.status === 'fulfilled'
       };
     }
   }

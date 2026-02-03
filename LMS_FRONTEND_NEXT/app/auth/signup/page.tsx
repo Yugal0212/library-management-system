@@ -4,7 +4,7 @@ import type React from "react"
 import { useState, useCallback, useRef, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { register } from "@/lib/api"
+import { fastRegister } from "@/lib/fast-auth"
 import { useToast } from "@/hooks/use-toast"
 import {
   BookOpen,
@@ -13,12 +13,12 @@ import {
   Eye,
   EyeOff,
   ArrowLeft,
-  CheckCircle,
-  AlertCircle,
   Library,
+  Loader2,
   Award,
   Sparkles,
-  Loader2,
+  AlertCircle,
+  CheckCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -144,20 +144,13 @@ export default function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Prevent double submission
-    if (isSubmittingRef.current || isLoading) {
-      return
-    }
-
-    if (!validateForm()) {
-      return
-    }
+    if (isSubmittingRef.current || isLoading) return
+    if (!validateForm()) return
 
     isSubmittingRef.current = true
     setIsLoading(true)
 
     try {
-      // Map UI role to backend enum
       const roleMap: Record<string, string> = {
         librarian: "LIBRARIAN",
         admin: "ADMIN",
@@ -165,8 +158,6 @@ export default function SignupPage() {
       }
 
       const name = `${formData.firstName.trim()} ${formData.lastName.trim()}`
-      
-      // Add metadata only if fields exist (reduce payload size)
       const metadata: Record<string, string> = {}
       
       if (selectedRole === "librarian") {
@@ -182,60 +173,36 @@ export default function SignupPage() {
         if (formData.address.trim()) metadata.address = formData.address.trim()
       }
       
-      const result = await register({
+      const result = await fastRegister({
         name,
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
-        role: roleMap[selectedRole] as "LIBRARIAN" | "ADMIN" | "STUDENT" | "TEACHER",
+        role: roleMap[selectedRole] as "LIBRARIAN" | "STUDENT" | "TEACHER",
         ...(Object.keys(metadata).length > 0 && { metadata })
       })
 
-      // Show appropriate success message
-      const title = result.isLibrarian ? "✓ Registration Initiated" : "✓ Registration Successful"
-      const description = result.message
-      const variant = result.emailSent === false ? "default" : "default"
-
       toast({
-        title,
-        description,
-        duration: result.emailSent === false ? 10000 : 5000, // Longer duration if email failed
+        title: result.isLibrarian ? "Registration Initiated" : "Registration Successful",
+        description: result.message,
       })
       
-      // Navigate to verification page immediately
-      const params = new URLSearchParams({
-        email: formData.email.trim().toLowerCase(),
-        role: selectedRole
-      })
-      
-      // Add OTP to URL if provided (fallback when email fails)
-      if (result.otp) {
-        params.append('otp', result.otp)
-      }
-      
-      router.push(`/auth/verify-email?${params.toString()}`)
+      router.push(`/auth/verify-email?email=${encodeURIComponent(formData.email.trim().toLowerCase())}&role=${selectedRole}`)
     } catch (err: any) {
-      console.error("Registration error:", err)
-      
-      // Parse error message
       let errorMessage = "Please review your details and try again."
       
       if (err?.message) {
         if (err.message.includes("already in use")) {
-          errorMessage = "This email is already registered. Please use a different email or try logging in."
-        } else if (err.message.includes("network") || err.message.includes("fetch")) {
-          errorMessage = "Network error. Please check your connection and try again."
+          errorMessage = "This email is already registered. Try logging in instead."
         } else {
           errorMessage = err.message
         }
       }
       
       toast({
-        title: "✗ Registration Failed",
+        title: "Registration Failed",
         description: errorMessage,
         variant: "destructive",
-        duration: 7000,
       })
-    } finally {
       setIsLoading(false)
       isSubmittingRef.current = false
     }

@@ -44,6 +44,9 @@ export function clearAuthData(): void {
   }
 }
 
+// Alias for compatibility
+export const clearAuth = clearAuthData
+
 // Store tokens in localStorage as backup
 export function setTokens(accessToken?: string, refreshToken?: string) {
   if (typeof window === "undefined") return
